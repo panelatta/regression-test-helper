@@ -158,7 +158,7 @@ start_gsr_and_inject() {
   local SBOX="$HOME/sandbox/bin/sandbox.sh"
   chmod +x "$SBOX"
   [ -x "$SBOX" ] || err "未找到 $SBOX"
-  log "向 PID=$target_pid 注入 sandbox（指定端口：$SANDBOX_PORT） ..."
+  log "向 PID=$target_pid 注入 sandbox(指定端口： $SANDBOX_PORT )"
   [ -r "$HOME/sandbox/lib/sandbox-core.jar" ] || err "缺少 $HOME/sandbox/lib/sandbox-core.jar（安装异常）"
   local attach_log="$WORKDIR/sandbox-attach.log"
   ( cd "$HOME/sandbox/bin" log "向 PID=$target_pid 注入 sandbox（指定端口：$SANDBOX_PORT） ..."log "向 PID=$target_pid 注入 sandbox（指定端口：$SANDBOX_PORT） ..." ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" ) > "$attach_log" 2>log "向 PID=$target_pid 注入 sandbox（指定端口：$SANDBOX_PORT） ..."1 || true
