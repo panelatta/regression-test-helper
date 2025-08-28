@@ -6,7 +6,7 @@ set -euo pipefail
 ###############################################################################
 WORKDIR="${WORKDIR:-$HOME/repeater-demo}"          # 工作目录（缓存下载/日志）
 SANDBOX_PORT="${SANDBOX_PORT:-12580}"              # sandbox/repeater 监听端口（要求固定为 12580）
-GSR_PORT="${GSR_PORT:-18080}"                       # 示例服务端口（仅在 START_GSR=true 且系统装有 Java 时启动）
+GSR_PORT="${GSR_PORT:-18080}"                      # 示例服务端口（仅在 START_GSR=true 且系统装有 Java 时启动）
 
 # 你提供的已编译 gs-rest-service JAR（避免 git/mvn）
 GSR_JAR_URL="${GSR_JAR_URL:-https://github.com/panelatta/regression-test-helper/raw/refs/heads/main/gs-rest-service/complete/target/gs-rest-service-0.1.0.jar}"
@@ -35,6 +35,22 @@ for c in "${need_cmds[@]}"; do have "$c" || err "缺少命令：$c（请在镜�
 
 mkdir -p "$WORKDIR"
 
+# 解析 sandbox 绝对路径；若存在 $HOME/sandbox（目录或符号链接）优先使用
+resolve_sandbox_home() {
+  if [ -x "$HOME/sandbox/bin/sandbox.sh" ]; then
+    (cd "$HOME/sandbox" && pwd)
+    return
+  fi
+  # 在 $HOME 下找任意包含 bin/sandbox.sh 的目录（最多两层）
+  local cand
+  cand="$(find "$HOME" -maxdepth 2 -type f -path "$HOME/*/bin/sandbox.sh" -print -quit 2>/dev/null || true)"
+  if [ -n "${cand:-}" ]; then
+    (cd "$(dirname "$cand")/.." && pwd)
+    return
+  fi
+  echo ""  # 由调用方决定是否 err
+}
+
 ###############################################################################
 # 三、下载 gs-rest-service.jar（存在即跳过，可重复执行幂等）
 ###############################################################################
@@ -50,21 +66,38 @@ fi
 ###############################################################################
 # 四、生成并执行“修补版” install-repeater.sh
 #    - 仅用 curl/tar 解压官方二进制
-#    - curl 强制改为 -fsSL（跟随重定向+失败即退出）
-#    - 已安装则跳过
+#    - 解压后创建/刷新 $HOME/sandbox -> 实际目录 的符号链接
 ###############################################################################
 PATCHED_INSTALL="$WORKDIR/install-repeater.sh"
 if [ ! -s "$PATCHED_INSTALL" ]; then
-  log "生成修补后的安装脚本（curl -fsSL；URL 可配置）"
+  log "生成修补后的安装脚本（curl -fsSL；URL 可配置；建立稳定符号链接）"
   cat > "$PATCHED_INSTALL" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-SANDBOX_HOME="${HOME}/sandbox"
+
+# 由外层脚本通过环境导入：SANDBOX_TAR_URL / REPEATER_TAR_URL
 MODULE_HOME="${HOME}/.sandbox-module"
+
+make_sandbox_symlink() {
+  # 找到实际解压目录（含 bin/sandbox.sh）
+  local cand dir
+  cand="$(find "$HOME" -maxdepth 2 -type f -path "$HOME/*/bin/sandbox.sh" -print -quit 2>/dev/null || true)"
+  if [ -n "${cand:-}" ]; then
+    dir="$(cd "$(dirname "$cand")/.." && pwd)"
+    ln -sfn "$dir" "$HOME/sandbox"   # 稳定入口
+    echo "[install] 绑定稳定入口：$HOME/sandbox -> $dir"
+  else
+    echo "[install][WARN] 未发现 bin/sandbox.sh，符号链接未创建；请检查解压结果" >&2
+  fi
+}
 
 main () {
   echo "[install] 下载 sandbox ..."
+  # 解压到 $HOME；不同版本可能顶层目录名不同（sandbox 或 sandbox-1.3.3）
   curl -fsSL "${SANDBOX_TAR_URL}" | tar xz -C "${HOME}"
+
+  echo "[install] 绑定 $HOME/sandbox 稳定入口 ..."
+  make_sandbox_symlink
 
   echo "[install] 下载 repeater 模块 ..."
   mkdir -p "${MODULE_HOME}"
@@ -80,6 +113,7 @@ fi
 # 传入 URL 变量（可在外部通过环境变量覆盖）
 export SANDBOX_TAR_URL REPEATER_TAR_URL
 
+# 已安装则跳过（检测稳定入口 + 模块目录）
 if [ -x "$HOME/sandbox/bin/sandbox.sh" ] && [ -d "$HOME/.sandbox-module/repeater" ]; then
   log "检测到 sandbox 与 repeater 模块已安装，跳过安装"
 else
@@ -117,11 +151,7 @@ log "配置完成：$CFG_FILE 中 repeat.standalone.mode=false"
 
 ###############################################################################
 # 七、（可选）启动示例服务并注入 sandbox（端口固定 12580）
-#     - 状态提示/校验：
-#         * 示例服务端口是否就绪
-#         * sandbox attach 是否成功（解析 attach 回显）
-#         * SERVER_PORT 是否等于 12580
-#         * repeater 模块是否出现在已加载模块列表；必要时 -F 刷新
+#     - 一切以绝对路径执行，进入 bin 目录后调用 ./sandbox.sh
 ###############################################################################
 REPEATER_MODULE_ID="repeater"
 
@@ -139,7 +169,7 @@ start_gsr_and_inject() {
 
   # 2) 等待端口就绪（最多 30s），用 bash 的 /dev/tcp（无需 nc）
   local ready=0 i
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+  for i in {1..30}; do
     (echo >/dev/tcp/127.0.0.1/$GSR_PORT) >/dev/null 2>&1 && { ready=1; break; } || sleep 1
   done
   if [ $ready -eq 1 ]; then
@@ -150,21 +180,26 @@ start_gsr_and_inject() {
 
   # 3) 精确定位目标 PID（避免依赖 pgrep）
   local target_pid
-  target_pid="$(ps -eo pid,cmd | grep -F "$GSR_JAR" | grep -v grep | awk '{print $1}' | head -n1)"
+  target_pid="$(ps -eo pid,cmd | grep -F "$GSR_JAR" | grep -v grep | awk '{print $1}' | head -n1 || true)"
   [ -z "${target_pid:-}" ] && target_pid="$app_pid"
   [ -z "${target_pid:-}" ] && err "无法定位示例服务 PID"
 
-  # 4) 注入 sandbox（指定端口 12580）
-  local SBOX="$HOME/sandbox/bin/sandbox.sh"
-  chmod +x "$SBOX"
-  [ -x "$SBOX" ] || err "未找到 $SBOX"
-  [ -r "$HOME/sandbox/lib/sandbox-core.jar" ] || err "缺少 $HOME/sandbox/lib/sandbox-core.jar（安装异常）"
+  # 4) 注入 sandbox（绝对路径 + 进入 bin 目录执行）
+  local SANDBOX_HOME SBOX attach_log list_log
+  SANDBOX_HOME="$(resolve_sandbox_home)"
+  [ -n "$SANDBOX_HOME" ] || err "未找到 sandbox 安装目录，请检查安装步骤"
+  SBOX="$SANDBOX_HOME/bin/sandbox.sh"
+  [ -x "$SBOX" ] || err "未找到可执行文件：$SBOX"
+  [ -r "$SANDBOX_HOME/lib/sandbox-core.jar" ] || err "缺少 $SANDBOX_HOME/lib/sandbox-core.jar（安装异常）"
+
+  # 预创建 token，避免 cat 报错；同时便于控制台使用
+  [ -f "$HOME/.sandbox.token" ] || printf "%s" "$(date +%Y%m%d%H%M%S)$$" > "$HOME/.sandbox.token"
 
   log "向 PID=$target_pid 注入 sandbox（指定端口：$SANDBOX_PORT） ..."
-  local attach_log="$WORKDIR/sandbox-attach.log"
-  "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" >"$attach_log" 2>&1 || true
+  attach_log="$WORKDIR/sandbox-attach.log"
+  ( cd "$SANDBOX_HOME/bin" && ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" ) >"$attach_log" 2>&1 || true
 
-  # 5) 校验 attach 回显（端口 & 基本信息） ——（原逻辑保留）
+  # 5) 校验 attach 回显（端口 & 基本信息）
   if grep -q 'SERVER_PORT' "$attach_log"; then
     log "附加回显（关键信息）如下："
     grep -E 'NAMESPACE|VERSION|MODE|SERVER_ADDR|SERVER_PORT' "$attach_log" || true
@@ -179,21 +214,20 @@ start_gsr_and_inject() {
 
   # 6) 检查 repeater 模块是否加载；未加载则尝试 -F 刷新后再检查一次
   log "检查已加载模块列表（应包含：$REPEATER_MODULE_ID） ..."
-  local list_log="$WORKDIR/sandbox-modules.log"
-  "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l >"$list_log" 2>&1 || true
+  list_log="$WORKDIR/sandbox-modules.log"
+  ( cd "$SANDBOX_HOME/bin" && ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" -l ) >"$list_log" 2>&1 || true
   if grep -qi "$REPEATER_MODULE_ID" "$list_log"; then
     log "模块已加载：$REPEATER_MODULE_ID"
   else
     warn "首次未检测到 $REPEATER_MODULE_ID，尝试执行 -F 刷新用户模块后重试"
-    "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -F >"$WORKDIR/sandbox-refresh.log" 2>&1 || true
-    "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l >"$list_log" 2>&1 || true
+    ( cd "$SANDBOX_HOME/bin" && ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" -F ) >"$WORKDIR/sandbox-refresh.log" 2>&1 || true
+    ( cd "$SANDBOX_HOME/bin" && ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" -l ) >"$list_log" 2>&1 || true
     if grep -qi "$REPEATER_MODULE_ID" "$list_log"; then
       log "刷新后已检测到模块：$REPEATER_MODULE_ID"
     else
       warn "仍未检测到 $REPEATER_MODULE_ID，请检查 ~/.sandbox-module/repeater 是否完整；详见 $list_log"
     fi
   fi
-
 
   log "repeater 配置文件：$HOME/.sandbox-module/cfg/repeater.properties（已设置 standalone=false）"
 }
@@ -206,9 +240,6 @@ fi
 
 ###############################################################################
 # 八、cloudflared Quick Tunnel（把 12580 暴露到公网）
-#     - 若未安装，自动下载对应架构二进制
-#     - 后台启动并解析 trycloudflare.com 的临时域名
-#     - 显示可供本地 repeater-console 使用的 HTTPS 入口
 ###############################################################################
 if [ "${START_TUNNEL}" = "true" ]; then
   if ! have "$CLOUDFLARE_BIN"; then
@@ -231,10 +262,7 @@ if [ "${START_TUNNEL}" = "true" ]; then
 
   # 等待日志中出现 trycloudflare URL（最多 40s）
   T_URL=""
-  for i in 1 2 3 4 5 6 7 8 9 10 \
-           11 12 13 14 15 16 17 18 19 20 \
-           21 22 23 24 25 26 27 28 29 30 \
-           31 32 33 34 35 36 37 38 39 40; do
+  for i in {1..40}; do
     if grep -Eo 'https://[-a-z0-9.]*trycloudflare\.com' "$TLOG" >/dev/null 2>&1; then
       T_URL="$(grep -Eo 'https://[-a-z0-9.]*trycloudflare\.com' "$TLOG" | tail -n1)"
       break
