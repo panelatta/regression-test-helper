@@ -159,6 +159,9 @@ start_gsr_and_inject() {
   chmod +x "$SBOX"
   [ -x "$SBOX" ] || err "未找到 $SBOX"
   log "向 PID=$target_pid 注入 sandbox（指定端口：$SANDBOX_PORT） ..."
+  [ -r "$HOME/sandbox/lib/sandbox-core.jar" ] || err "缺少 $HOME/sandbox/lib/sandbox-core.jar（安装异常）"
+  local attach_log="$WORKDIR/sandbox-attach.log"
+  ( cd "$HOME/sandbox/bin" log "向 PID=$target_pid 注入 sandbox（指定端口：$SANDBOX_PORT） ..."log "向 PID=$target_pid 注入 sandbox（指定端口：$SANDBOX_PORT） ..." ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" ) > "$attach_log" 2>log "向 PID=$target_pid 注入 sandbox（指定端口：$SANDBOX_PORT） ..."1 || true
   local attach_log="$WORKDIR/sandbox-attach.log"
   "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" > "$attach_log" 2>&1 || true
 
@@ -178,13 +181,13 @@ start_gsr_and_inject() {
   # 6) 检查 repeater 模块是否加载；未加载则尝试 -F 刷新后再检查一次
   log "检查已加载模块列表（应包含：$REPEATER_MODULE_ID） ..."
   local list_log="$WORKDIR/sandbox-modules.log"
-  "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l > "$list_log" 2>&1 || true
+  ( cd "$HOME/sandbox/bin" "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l"$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" -l ) > "$list_log" 2>&1 || true
   if grep -qi "$REPEATER_MODULE_ID" "$list_log"; then
     log "模块已加载：$REPEATER_MODULE_ID"
   else
     warn "首次未检测到 $REPEATER_MODULE_ID，尝试执行 -F 刷新用户模块后重试"
-    "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -F > "$WORKDIR/sandbox-refresh.log" 2>&1 || true
-    "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l > "$list_log" 2>&1 || true
+    ( cd "$HOME/sandbox/bin" "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -F"$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -F ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" -F ) > "$WORKDIR/sandbox-refresh.log" 2>&1 || true
+    ( cd "$HOME/sandbox/bin" "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l"$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" -l ) > "$list_log" 2>&1 || true
     if grep -qi "$REPEATER_MODULE_ID" "$list_log"; then
       log "刷新后已检测到模块：$REPEATER_MODULE_ID"
     else
