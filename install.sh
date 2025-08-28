@@ -6,7 +6,7 @@ set -euo pipefail
 ###############################################################################
 WORKDIR="${WORKDIR:-$HOME/repeater-demo}"          # 工作目录（缓存下载/日志）
 SANDBOX_PORT="${SANDBOX_PORT:-12580}"              # sandbox/repeater 监听端口（要求固定为 12580）
-GSR_PORT="${GSR_PORT:-8080}"                       # 示例服务端口（仅在 START_GSR=true 且系统装有 Java 时启动）
+GSR_PORT="${GSR_PORT:-18080}"                       # 示例服务端口（仅在 START_GSR=true 且系统装有 Java 时启动）
 
 # 你提供的已编译 gs-rest-service JAR（避免 git/mvn）
 GSR_JAR_URL="${GSR_JAR_URL:-https://github.com/panelatta/regression-test-helper/raw/refs/heads/main/gs-rest-service/complete/target/gs-rest-service-0.1.0.jar}"
@@ -156,10 +156,11 @@ start_gsr_and_inject() {
 
   # 4) 注入 sandbox（指定端口 12580）
   local SBOX="$HOME/sandbox/bin/sandbox.sh"
+  chmod +x "$SBOX"
   [ -x "$SBOX" ] || err "未找到 $SBOX"
   log "向 PID=$target_pid 注入 sandbox（指定端口：$SANDBOX_PORT） ..."
   local attach_log="$WORKDIR/sandbox-attach.log"
-  bash "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" > "$attach_log" 2>&1 || true
+  "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" > "$attach_log" 2>&1 || true
 
   # 5) 校验 attach 回显（端口 & 基本信息）
   if grep -q 'SERVER_PORT' "$attach_log"; then
@@ -177,13 +178,13 @@ start_gsr_and_inject() {
   # 6) 检查 repeater 模块是否加载；未加载则尝试 -F 刷新后再检查一次
   log "检查已加载模块列表（应包含：$REPEATER_MODULE_ID） ..."
   local list_log="$WORKDIR/sandbox-modules.log"
-  bash "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l > "$list_log" 2>&1 || true
+  "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l > "$list_log" 2>&1 || true
   if grep -qi "$REPEATER_MODULE_ID" "$list_log"; then
     log "模块已加载：$REPEATER_MODULE_ID"
   else
     warn "首次未检测到 $REPEATER_MODULE_ID，尝试执行 -F 刷新用户模块后重试"
-    bash "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -F > "$WORKDIR/sandbox-refresh.log" 2>&1 || true
-    bash "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l > "$list_log" 2>&1 || true
+    "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -F > "$WORKDIR/sandbox-refresh.log" 2>&1 || true
+    "$SBOX" -p "$target_pid" -P "$SANDBOX_PORT" -l > "$list_log" 2>&1 || true
     if grep -qi "$REPEATER_MODULE_ID" "$list_log"; then
       log "刷新后已检测到模块：$REPEATER_MODULE_ID"
     else
