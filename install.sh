@@ -230,6 +230,7 @@ start_gsr_and_inject() {
     log "模块已加载：$REPEATER_MODULE_ID"
   else
     warn "首次未检测到 $REPEATER_MODULE_ID，尝试执行 -F 刷新用户模块后重试"
+    ( export JAVA_TOOL_OPTIONS="$SANDBOX_JAVA_MEM_OPTS ${JAVA_TOOL_OPTIONS:-}"; cd "$SANDBOX_HOME/bin" && ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" -R ) >"$WORKDIR/sandbox-refresh.log" 2>&1 || true
     ( export JAVA_TOOL_OPTIONS="$SANDBOX_JAVA_MEM_OPTS ${JAVA_TOOL_OPTIONS:-}"; cd "$SANDBOX_HOME/bin" && ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" -F ) >"$WORKDIR/sandbox-refresh.log" 2>&1 || true
     ( export JAVA_TOOL_OPTIONS="$SANDBOX_JAVA_MEM_OPTS ${JAVA_TOOL_OPTIONS:-}"; cd "$SANDBOX_HOME/bin" && ./sandbox.sh -p "$target_pid" -P "$SANDBOX_PORT" -l ) >"$list_log" 2>&1 || true
     if grep -qi "$REPEATER_MODULE_ID" "$list_log"; then
