@@ -138,6 +138,21 @@ else
 fi
 
 ###############################################################################
+# 4.5 覆盖拷贝：将 ~/.sandbox-module/repeater/* 合并到 ~/.sandbox-module/
+#     目的：确保后续修改 ~/.sandbox-module/cfg/repeater.properties 命中拷贝到根的那份
+#     说明：采用 tar 管道，避免依赖 rsync；可重复执行（幂等覆盖）
+###############################################################################
+MODULE_HOME="$HOME/.sandbox-module"
+REPEATER_DIR="$MODULE_HOME/repeater"
+if [ -d "$REPEATER_DIR" ]; then
+  log "合并 $REPEATER_DIR/* → $MODULE_HOME"
+  mkdir -p "$MODULE_HOME"
+  ( cd "$REPEATER_DIR" && tar cf - . ) | ( cd "$MODULE_HOME" && tar xpf - )
+else
+  err "未找到 repeater 模块目录：$REPEATER_DIR（请检查安装是否成功）"
+fi
+
+###############################################################################
 # 五、复制 ~/.sandbox-module/repeater → ~/.sandbox-repeater
 ###############################################################################
 MODULE_HOME="$HOME/.sandbox-module"
