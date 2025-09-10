@@ -17,10 +17,10 @@ GSR_JAR_URL="${GSR_JAR_URL:-https://github.com/panelatta/regression-test-helper/
 
 # 官方 Release 包（安装 sandbox 与 repeater 模块；如需内网镜像可改这两项）
 SANDBOX_TAR_URL="${SANDBOX_TAR_URL:-https://github.com/alibaba/jvm-sandbox-repeater/releases/download/v1.0.0/sandbox-1.3.3-bin.tar}"
-REPEATER_TAR_URL="${REPEATER_TAR_URL:-https://github.com/alibaba/jvm-sandbox-repeater/releases/download/v1.0.0/repeater-stable-bin.tar}"
+REPEATER_TAR_URL="${REPEATER_TAR_URL:-https://github.com/panelatta/sandbox-repeater/releases/download/v1.1.4/repeater-stable-bin.tar}"
 
 # cloudflared 可执行文件路径（若不存在会自动下载到此处）
-CLOUDFLARE_BIN="${CLOUDFLARE_BIN:-$HOME/bin/cloudflared}"
+# CLOUDFLARE_BIN="${CLOUDFLARE_BIN:-$HOME/bin/cloudflared}"
 
 # 是否在 Pod 内启动示例服务并注入 sandbox；是否启动 cloudflared Quick Tunnel
 START_GSR="${START_GSR:-true}"
@@ -267,45 +267,45 @@ fi
 ###############################################################################
 # 八、cloudflared Quick Tunnel（把 12580 暴露到公网）
 ###############################################################################
-if [ "${START_TUNNEL}" = "true" ]; then
-  if ! have "$CLOUDFLARE_BIN"; then
-    log "未发现 cloudflared，准备下载（仅用 curl）"
-    mkdir -p "$(dirname "$CLOUDFLARE_BIN")"
-    ARCH="$(uname -m)"
-    case "$ARCH" in
-      x86_64|amd64) CF_ARCH="amd64" ;;
-      aarch64|arm64) CF_ARCH="arm64" ;;
-      *) err "未知架构 $ARCH，请手动提供 cloudflared 可执行文件" ;;
-    esac
-    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$CF_ARCH" -o "$CLOUDFLARE_BIN"
-    chmod +x "$CLOUDFLARE_BIN"
-    log "cloudflared 已下载：$CLOUDFLARE_BIN"
-  fi
+# if [ "${START_TUNNEL}" = "true" ]; then
+#   if ! have "$CLOUDFLARE_BIN"; then
+#     log "未发现 cloudflared，准备下载（仅用 curl）"
+#     mkdir -p "$(dirname "$CLOUDFLARE_BIN")"
+#     ARCH="$(uname -m)"
+#     case "$ARCH" in
+#       x86_64|amd64) CF_ARCH="amd64" ;;
+#       aarch64|arm64) CF_ARCH="arm64" ;;
+#       *) err "未知架构 $ARCH，请手动提供 cloudflared 可执行文件" ;;
+#     esac
+#     curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$CF_ARCH" -o "$CLOUDFLARE_BIN"
+#     chmod +x "$CLOUDFLARE_BIN"
+#     log "cloudflared 已下载：$CLOUDFLARE_BIN"
+#   fi
 
-  log "启动 cloudflared Quick Tunnel → http://127.0.0.1:${SANDBOX_PORT}"
-  TLOG="$WORKDIR/cloudflared-${SANDBOX_PORT}.log"
-  nohup "$CLOUDFLARE_BIN" tunnel --no-autoupdate --url "http://127.0.0.1:${SANDBOX_PORT}" > "$TLOG" 2>&1 &
+#   log "启动 cloudflared Quick Tunnel → http://127.0.0.1:${SANDBOX_PORT}"
+#   TLOG="$WORKDIR/cloudflared-${SANDBOX_PORT}.log"
+#   nohup "$CLOUDFLARE_BIN" tunnel --no-autoupdate --url "http://127.0.0.1:${SANDBOX_PORT}" > "$TLOG" 2>&1 &
 
-  # 等待日志中出现 trycloudflare URL（最多 40s）
-  T_URL=""
-  for i in {1..40}; do
-    if grep -Eo 'https://[-a-z0-9.]*trycloudflare\.com' "$TLOG" >/dev/null 2>&1; then
-      T_URL="$(grep -Eo 'https://[-a-z0-9.]*trycloudflare\.com' "$TLOG" | tail -n1)"
-      break
-    fi
-    sleep 1
-  done
+#   # 等待日志中出现 trycloudflare URL（最多 40s）
+#   T_URL=""
+#   for i in {1..40}; do
+#     if grep -Eo 'https://[-a-z0-9.]*trycloudflare\.com' "$TLOG" >/dev/null 2>&1; then
+#       T_URL="$(grep -Eo 'https://[-a-z0-9.]*trycloudflare\.com' "$TLOG" | tail -n1)"
+#       break
+#     fi
+#     sleep 1
+#   done
 
-  if [ -n "$T_URL" ]; then
-    log "Cloudflared 隧道已就绪：$T_URL"
-    echo ">>> 请在你本地运行的 repeater-console 中，将目标 Sandbox 地址设置为：$T_URL"
-    echo ">>> 该地址会反代到 Pod 内的 127.0.0.1:${SANDBOX_PORT}（HTTPS → 12580）"
-  else
-    err "未能解析到 cloudflared URL，请检查日志：$TLOG"
-  fi
-else
-  log "未启动 cloudflared（START_TUNNEL=false）。如需公网连接，请启用它。"
-fi
+#   if [ -n "$T_URL" ]; then
+#     log "Cloudflared 隧道已就绪：$T_URL"
+#     echo ">>> 请在你本地运行的 repeater-console 中，将目标 Sandbox 地址设置为：$T_URL"
+#     echo ">>> 该地址会反代到 Pod 内的 127.0.0.1:${SANDBOX_PORT}（HTTPS → 12580）"
+#   else
+#     err "未能解析到 cloudflared URL，请检查日志：$TLOG"
+#   fi
+# else
+#   log "未启动 cloudflared（START_TUNNEL=false）。如需公网连接，请启用它。"
+# fi
 
 log "全部完成。"
 
