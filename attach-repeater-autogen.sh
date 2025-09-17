@@ -12,7 +12,7 @@ CONSOLE_BASE_URL="${CONSOLE_BASE_URL:-http://repeater-console-svc.repeater-conso
 
 # Release 包（可换内网源）
 SANDBOX_TAR_URL="${SANDBOX_TAR_URL:-https://github.com/alibaba/jvm-sandbox-repeater/releases/download/v1.0.0/sandbox-1.3.3-bin.tar}"
-REPEATER_TAR_URL="${REPEATER_TAR_URL:-https://github.com/panelatta/sandbox-repeater/releases/download/v1.1.4/repeater-stable-bin.tar}"
+REPEATER_TAR_URL="${REPEATER_TAR_URL:-https://github.com/alibaba/jvm-sandbox-repeater/releases/download/v1.0.0/repeater-stable-bin.tar}"
 
 # 多 JVM 时的行为：true=对“所有” Java 进程都 attach；false=仅自动挑一个
 ATTACH_ALL="${ATTACH_ALL:-true}"
