@@ -8,7 +8,7 @@ WORKDIR="${WORKDIR:-$HOME/repeater-work}"
 SANDBOX_PORT="${SANDBOX_PORT:-12580}"
 SANDBOX_JAVA_MEM_OPTS="${SANDBOX_JAVA_MEM_OPTS:--Xms32m -Xmx128m -XX:+UseSerialGC}"
 # 你的 console 地址（你提供的域名，走 HTTPS）
-CONSOLE_BASE_URL="${CONSOLE_BASE_URL:-https://repeater-alpha.tplinkcloud.com}"
+CONSOLE_BASE_URL="${CONSOLE_BASE_URL:-http://repeater-console-svc.repeater-console-start.svc.cluster.local}"
 
 # Release 包（可换内网源）
 SANDBOX_TAR_URL="${SANDBOX_TAR_URL:-https://github.com/alibaba/jvm-sandbox-repeater/releases/download/v1.0.0/sandbox-1.3.3-bin.tar}"
